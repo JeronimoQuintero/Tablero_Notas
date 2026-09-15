@@ -1,0 +1,3 @@
+import { verifyToken } from '../services/auth.service.js'; import { userRepository } from '../repositories/user.repository.js';
+export async function authenticate(req, res, next) { try { const token = req.headers.authorization?.replace(/^Bearer\s+/i, ''); const session = verifyToken(token); const user = await userRepository.findById(session.id); if (!user?.active) return res.status(403).json({ message: 'Usuario inactivo' }); req.user = { id: user.id, role: user.role }; next(); } catch { res.status(401).json({ message: 'Sesión no válida' }); } }
+export const requireAdmin = (req, res, next) => req.user.role === 'ADMIN' ? next() : res.status(403).json({ message: 'Solo administradores' });

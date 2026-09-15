@@ -1,0 +1,22 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import authRoutes from './routes/auth.routes.js';
+import noteRoutes from './routes/note.routes.js';
+import userRoutes from './routes/user.routes.js';
+import dashboardRoutes from './routes/dashboard.routes.js';
+import { errorHandler, notFound } from './middleware/error.middleware.js';
+
+const app = express();
+app.disable('x-powered-by');
+app.use(helmet({ contentSecurityPolicy: false }));
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3001,http://localhost:5173,http://localhost:8080').split(',');
+app.use(cors({ origin: (origin, callback) => { if (!origin || allowedOrigins.includes(origin)) return callback(null, true); return callback(null, false); } }));
+app.use(express.json({ limit: '32kb' }));
+app.use('/auth', authRoutes);
+app.use('/notes', noteRoutes);
+app.use('/users', userRoutes);
+app.use('/dashboard', dashboardRoutes);
+app.use(notFound);
+app.use(errorHandler);
+app.listen(Number(process.env.PORT || 3001), () => console.log('API listening on 3001'));

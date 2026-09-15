@@ -1,0 +1,28 @@
+# Dependencias
+node_modules/
+
+# Builds
+dist/
+build/
+
+# Entornos y secretos
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema y editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Material de trabajo interno (no se entrega)
+work/
+
+# Entorno local de AWS/SAM
+.aws-sam/

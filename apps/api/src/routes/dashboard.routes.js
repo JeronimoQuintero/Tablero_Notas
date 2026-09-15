@@ -1,0 +1,1 @@
+import { Router } from 'express'; import { getMetrics } from '../controllers/dashboard.controller.js'; import { authenticate } from '../middleware/auth.middleware.js'; const router = Router(); router.get('/metrics', authenticate, getMetrics); export default router;

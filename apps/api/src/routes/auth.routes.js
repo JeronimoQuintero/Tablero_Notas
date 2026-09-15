@@ -1,0 +1,3 @@
+import { Router } from 'express'; import rateLimit from 'express-rate-limit'; import { loginUser } from '../controllers/auth.controller.js'; import { validateLogin } from '../middleware/validate.middleware.js';
+const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false, message: { message: 'Demasiados intentos. Inténtalo de nuevo más tarde.' } });
+const router = Router(); router.post('/login', loginLimiter, validateLogin, loginUser); export default router;

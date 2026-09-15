@@ -1,0 +1,1 @@
+import { login } from '../services/auth.service.js'; export const loginUser = async (req, res, next) => { try { res.json(await login(req.body.email, req.body.password)); } catch (error) { next(error); } };

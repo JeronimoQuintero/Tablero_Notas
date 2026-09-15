@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: team_notes
+      POSTGRES_USER: team_notes
+      POSTGRES_PASSWORD: team_notes_local
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U team_notes -d team_notes"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports: ["3001:3001"]
+    environment:
+      DATABASE_URL: postgresql://team_notes:team_notes_local@db:5432/team_notes?schema=public
+      JWT_SECRET: local-development-only-change-in-production
+    depends_on:
+      db:
+        condition: service_healthy
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports: ["8080:80"]
+    depends_on: [api]
+
+volumes:
+  postgres_data:

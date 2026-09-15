@@ -1,0 +1,23 @@
+{
+  "name": "team-notes-portal",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "services/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=api\" \"npm run dev --workspace=web\"",
+    "test": "npm run test --workspace=api",
+    "seed": "npm run db:seed --workspace=api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "source-map-js": "^1.2.1"
+  },
+  "dependencies": {
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
+    "react-beautiful-dnd": "^13.1.1"
+  }
+}

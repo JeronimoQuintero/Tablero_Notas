@@ -1,0 +1,240 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  Portal de notas: API de usuarios y notas en EC2 (contenedor Docker) con RDS PostgreSQL,
+  Lambda de métricas del dashboard y frontend en S3/CloudFront.
+Parameters:
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Par de claves para conectarse por SSH a la instancia EC2 de la API.
+  RepositoryUrl:
+    Type: String
+    Description: URL HTTPS del repositorio con el código (git clone) para construir la imagen de la API en EC2.
+    Default: https://github.com/USUARIO/REPOSITORIO.git
+  DBUsername:
+    Type: String
+    Description: Usuario maestro de la base de datos PostgreSQL (RDS).
+    Default: team_notes
+  DBPassword:
+    Type: String
+    NoEcho: true
+    Description: Contraseña maestra de la base de datos. Usa un valor seguro de al menos 8 caracteres.
+    MinLength: 8
+  JwtSecret:
+    Type: String
+    NoEcho: true
+    Description: Secreto para firmar los JWT de la API. Usa un valor largo y aleatorio.
+    MinLength: 16
+  InstanceType:
+    Type: String
+    Description: Tipo de instancia EC2 para la API.
+    Default: t3.micro
+    AllowedValues: [t2.micro, t3.micro, t3.small]
+  AdminIpCidr:
+    Type: String
+    Description: Rango IP (CIDR) autorizado para SSH a la instancia EC2. Restringe a tu IP de administración; 0.0.0.0/0 lo abre a todo Internet.
+    Default: 0.0.0.0/0
+    AllowedPattern: '^[0-9./]+$'
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{ Key: Name, Value: TeamNotesVpc }]
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags: [{ Key: Name, Value: TeamNotesIgw }]
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags: [{ Key: Name, Value: TeamNotesSubnet1 }]
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags: [{ Key: Name, Value: TeamNotesSubnet2 }]
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+  RouteInternet:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  Subnet1Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref RouteTable
+  Subnet2Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref RouteTable
+  ApiSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Acceso SSH y HTTP al contenedor de la API
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 22, ToPort: 22, CidrIp: !Ref AdminIpCidr }
+        - { IpProtocol: tcp, FromPort: 3001, ToPort: 3001, CidrIp: 0.0.0.0/0 }
+      Tags: [{ Key: Name, Value: TeamNotesApiSg }]
+  RdsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Acceso a PostgreSQL solo desde la API
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref ApiSecurityGroup
+      Tags: [{ Key: Name, Value: TeamNotesRdsSg }]
+  ApiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags: [{ Key: Name, Value: TeamNotesApiRole }]
+  ApiInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref ApiRole]
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subredes de la base de datos de la API
+      SubnetIds: [!Ref PublicSubnet1, !Ref PublicSubnet2]
+  RdsDatabase:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: team-notes-db
+      DBName: team_notes
+      Engine: postgres
+      EngineVersion: '16.4'
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: 20
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups: [!Ref RdsSecurityGroup]
+      PubliclyAccessible: false
+      MultiAZ: false
+      StorageEncrypted: true
+      BackupRetentionPeriod: 7
+      Tags: [{ Key: Name, Value: TeamNotesRds }]
+  Ec2Instance:
+    Type: AWS::EC2::Instance
+    DependsOn: RouteInternet
+    Properties:
+      ImageId: !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          AssociatePublicIpAddress: true
+          SubnetId: !Ref PublicSubnet1
+          GroupSet: [!Ref ApiSecurityGroup]
+      IamInstanceProfile: !Ref ApiInstanceProfile
+      UserData:
+        Fn::Base64:
+          Fn::Sub:
+            - |
+              #!/bin/bash
+              set -e
+              dnf update -y
+              dnf install -y docker git
+              systemctl enable --now docker
+              cd /root
+              git clone ${RepositoryUrl} app
+              cd app
+              docker build -f Dockerfile.api -t team-notes-api .
+              docker run -d --name team-notes-api --restart unless-stopped \
+                -p 3001:3001 \
+                -e DATABASE_URL="postgresql://${DBUsername}:${DBPassword}@${RdsAddress}:${RdsPort}/team_notes?schema=public" \
+                -e JWT_SECRET="${JwtSecret}" \
+                -e CORS_ORIGIN="https://${CfDomain}" \
+                team-notes-api
+            - RepositoryUrl: !Ref RepositoryUrl
+              DBUsername: !Ref DBUsername
+              DBPassword: !Ref DBPassword
+              RdsAddress: !GetAtt RdsDatabase.Endpoint.Address
+              RdsPort: !GetAtt RdsDatabase.Endpoint.Port
+              JwtSecret: !Ref JwtSecret
+              CfDomain: !GetAtt Distribution.DomainName
+      Tags: [{ Key: Name, Value: TeamNotesApi }]
+  MetricsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../services/metrics-lambda/
+      Handler: index.handler
+      Runtime: nodejs22.x
+      Timeout: 10
+      Events:
+        Api:
+          Type: Api
+          Properties: { Path: /dashboard/metrics, Method: post }
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties: { PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true } }
+  FrontendOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-frontend-oac'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub '${FrontendBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}'
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        Origins: [{ Id: frontend, DomainName: !GetAtt FrontendBucket.RegionalDomainName, OriginAccessControlId: !Ref FrontendOriginAccessControl, S3OriginConfig: {} }]
+        DefaultCacheBehavior: { TargetOriginId: frontend, ViewerProtocolPolicy: redirect-to-https, AllowedMethods: [GET, HEAD], CachedMethods: [GET, HEAD], ForwardedValues: { QueryString: false } }
+Outputs:
+  ApiUrl: { Value: !Sub 'http://${Ec2Instance.PublicDnsName}:3001' }
+  RdsEndpoint: { Value: !GetAtt RdsDatabase.Endpoint.Address }
+  MetricsEndpoint: { Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/dashboard/metrics' }
+  CloudFrontUrl: { Value: !Sub 'https://${Distribution.DomainName}' }
+  FrontendBucket: { Value: !Ref FrontendBucket }
