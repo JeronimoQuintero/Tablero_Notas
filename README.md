@@ -138,4 +138,4 @@ Tiempo efectivo total: **7 horas**.
 
 ## Entrega
 
-Proyecto completo entregado por archivo comprimido. El código, los Dockerfiles, la plantilla SAM y estas instrucciones permiten ejecutar y revisar la aplicación sin asistencia externa. La versión entregada coincide con el contenido de este paquete.
+Proyecto completo entregado: El código, los Dockerfiles, la plantilla SAM.
