@@ -16,8 +16,6 @@
     "source-map-js": "^1.2.1"
   },
   "dependencies": {
-    "express-rate-limit": "^8.7.0",
-    "helmet": "^8.3.0",
     "react-beautiful-dnd": "^13.1.1"
   }
 }
