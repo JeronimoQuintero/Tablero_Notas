@@ -138,4 +138,7 @@ Tiempo efectivo total: **7 horas**.
 
 ## Entrega
 
-Proyecto completo entregado: El código, los Dockerfiles, la plantilla SAM.
+- **Repositorio:** https://github.com/JeronimoQuintero/Tablero_Notas (rama `main`).
+- **Versión identificada:** último commit de la rama `main` (ver https://github.com/JeronimoQuintero/Tablero_Notas/commits/main).
+- El proyecto incluye el código de la aplicación, los Dockerfiles, la plantilla SAM y estas instrucciones, y se puede ejecutar y revisar sin asistencia externa.
+- **Vídeo demostrativo:** _(añadir aquí el enlace o archivo del vídeo cuando esté disponible)._
